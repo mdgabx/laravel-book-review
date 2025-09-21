@@ -15,7 +15,8 @@ class BookController extends Controller
     {
         $title = $request->input('title');
         $filter = $request->input('filter', '');
-
+        $perPage = $request->input('per_page', 10);
+        $page = $request->input('page', 1);
 
         $books = Book::when($title, fn($query, $title) => $query->title($title));
 
@@ -24,13 +25,15 @@ class BookController extends Controller
             'popular_last_6months' => $books->popularLastSixMonth(),
             'highest_rated_last_month' => $books->highestRatedLastMonth(),
             'highest_rated_last_6months' => $books->highestRatedLastSixMonth(),
-            default => $books->latest()
+            default => $books->latest()->withAvgRating()->withReviewsCount()
         };
 
         // $books = $books->get();
 
         $cacheKey = 'books:' . $filter . ":" . $title;
-        $books = Cache::remember($cacheKey, 3600, fn() => $books->get());
+        $books = Cache::remember($cacheKey, 3600, fn() =>  $books->paginate($perPage, ['*'], 'page', $page));
+
+        // dd($books);
 
         return view('books.index', ['books' => $books]);
     }
@@ -54,15 +57,33 @@ class BookController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Book $book)
+    // public function show(Book $book)
+    // {
+    //     $cacheKey = "book:" . $book->id;
+    //     $book = cache()->remember($cacheKey, 3600, fn() => $book->latest());
+
+    //     return view('books.show', [
+    //         'book' => $book
+    //     ]);
+    // }
+
+    public function show(int $id)
     {
-        $cacheKey = "book:" . $book->id;
-        $book = cache()->remember($cacheKey, 3600, fn() => $book->latest());
+        $cacheKey = "book:" . $id;
+        $book = cache()->remember(
+            $cacheKey,
+            3600,
+            fn() =>
+            Book::with([
+                'reviews' => fn($query) => $query->latest()
+            ])->withAvgRating()->withReviewsCount()->findOrFail($id)
+        );
 
         return view('books.show', [
             'book' => $book
         ]);
     }
+
 
     /**
      * Show the form for editing the specified resource.
